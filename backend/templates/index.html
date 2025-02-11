@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Chat with the Model & Upload PDF</title>
+  <style>
+    /* Basic layout styling for sidebar and main chat area */
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+    .navbar {
+      position: absolute;
+      top: 0;
+      right: 0;
+      padding: 10px;
+      font-size: 14px;
+      z-index: 1000;
+    }
+    .navbar a {
+      text-decoration: none;
+      color: #333;
+      margin-left: 10px;
+      font-weight: bold;
+    }
+    .sidebar {
+      width: 250px;
+      background-color: #f7f7f7;
+      border-right: 1px solid #ccc;
+      padding: 10px;
+      overflow-y: auto;
+    }
+    .chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+      margin-left: 25px; /* Make space for sidebar */
+    }
+    .chat-box {
+      flex: 1;
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-bottom: 10px;
+      overflow-y: auto;
+    }
+    .message {
+      margin-bottom: 5px;
+    }
+    .user {
+      font-weight: bold;
+    }
+    .bot {
+      color: blue;
+    }
+    .system {
+      color: green;
+    }
+    .chat-session {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px;
+      border-bottom: 1px solid #ddd;
+      cursor: pointer;
+    }
+    .chat-session.active {
+      background-color: #e2e2e2;
+    }
+    .chat-session:hover {
+      background-color: #ddd;
+    }
+    .chat-session .delete-btn {
+      color: red;
+      font-size: 16px;
+      cursor: pointer;
+      margin-left: 10px;
+    }
+    .upload-section {
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Top right profile/login area -->
+  <div class="navbar">
+    <a href="#" id="profile_link">Login / Register</a>
+  </div>
+
+  <!-- Left sidebar: List of chat sessions and a New Chat button -->
+  <div class="sidebar">
+    <button id="new_chat_btn">New Chat</button>
+    <div id="chat_list">
+      <!-- Chat sessions will be dynamically listed here -->
+    </div>
+  </div>
+
+  <!-- Main chat container -->
+  <div class="chat-container">
+    <div>
+      <label for="model_select">Select Model:</label>
+      <select id="model_select"></select>
+    </div>
+    <div>
+      <input type="radio" id="general" name="chat_mode" value="general" checked>
+      <label for="general">General Chat</label>
+      <input type="radio" id="pdf" name="chat_mode" value="pdf">
+      <label for="pdf">PDF Chat</label>
+    </div>
+    <div class="chat-box" id="chat_box">
+      <!-- Current chat session messages will be displayed here -->
+    </div>
+    <div>
+      <input type="text" id="chat_input" placeholder="Type your message..." style="width: 80%;">
+      <button id="send_btn">Send</button>
+    </div>
+    <div class="upload-section">
+      <h2>Upload PDF</h2>
+      <input type="file" id="pdf_file" accept="application/pdf">
+      <button id="upload_btn">Upload PDF</button>
+    </div>
+  </div>
+
+  <script>
+    // Store all chat sessions in this array.
+    // Each chat session is an object with an id and a messages array.
+    let chats = [];
+    let currentChatIndex = 0; // Index of the currently active chat
+
+    // Initialize with one chat session when the page loads.
+    function initChats() {
+      chats.push({ id: Date.now(), messages: [] });
+      renderChatList();
+      loadChat(currentChatIndex);
+    }
+
+    // Render the list of chats in the left sidebar.
+    function renderChatList() {
+      const chatListDiv = document.getElementById("chat_list");
+      chatListDiv.innerHTML = "";
+      chats.forEach((chat, index) => {
+        const chatDiv = document.createElement("div");
+        chatDiv.className = "chat-session" + (index === currentChatIndex ? " active" : "");
+        
+        // Chat title (e.g., "Chat 1")
+        const titleSpan = document.createElement("span");
+        titleSpan.innerText = "Chat " + (index + 1);
+        titleSpan.style.flex = "1";
+        titleSpan.addEventListener("click", () => {
+          currentChatIndex = index;
+          loadChat(currentChatIndex);
+          renderChatList();
+        });
+        chatDiv.appendChild(titleSpan);
+
+        // Delete button for the chat session.
+        const deleteBtn = document.createElement("span");
+        deleteBtn.className = "delete-btn";
+        deleteBtn.innerText = "🗑";
+        deleteBtn.title = "Delete chat";
+        deleteBtn.addEventListener("click", (e) => {
+          // Prevent click event from bubbling up to the chat session click.
+          e.stopPropagation();
+          deleteChat(index);
+        });
+        chatDiv.appendChild(deleteBtn);
+
+        chatListDiv.appendChild(chatDiv);
+      });
+    }
+
+    // Delete the chat at a given index.
+    function deleteChat(index) {
+      if (confirm("Are you sure you want to delete this chat?")) {
+        chats.splice(index, 1);
+        // Adjust currentChatIndex if needed.
+        if (currentChatIndex >= chats.length) {
+          currentChatIndex = chats.length - 1;
+        }
+        // If no chats left, create a new one.
+        if (chats.length === 0) {
+          chats.push({ id: Date.now(), messages: [] });
+          currentChatIndex = 0;
+        }
+        renderChatList();
+        loadChat(currentChatIndex);
+      }
+    }
+
+    // Load the messages for the selected chat session into the chat box.
+    function loadChat(index) {
+      const chatBox = document.getElementById("chat_box");
+      chatBox.innerHTML = "";
+      chats[index].messages.forEach(msg => {
+        addMessageToChatBox(msg.sender, msg.text);
+      });
+    }
+
+    // Append a message to the chat box UI.
+    function addMessageToChatBox(sender, text) {
+      const chatBox = document.getElementById("chat_box");
+      const messageDiv = document.createElement("div");
+      messageDiv.className = "message";
+      if (sender === "User") {
+        messageDiv.innerHTML = '<span class="user">' + sender + ':</span> ' + text;
+      } else if (sender === "Bot") {
+        messageDiv.innerHTML = '<span class="bot">' + sender + ':</span> ' + text;
+      } else {
+        messageDiv.innerHTML = '<span class="system">' + sender + ':</span> ' + text;
+      }
+      chatBox.appendChild(messageDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    // Append a message to the current chat session and update the UI.
+    function appendMessage(sender, text) {
+      chats[currentChatIndex].messages.push({ sender: sender, text: text });
+      addMessageToChatBox(sender, text);
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+      // Initialize the chats with one session.
+      initChats();
+
+      // Populate the model dropdown from the /models endpoint.
+      fetch('/models')
+        .then(response => response.json())
+        .then(data => {
+          const modelSelect = document.getElementById('model_select');
+          data.models.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            option.text = model;
+            modelSelect.appendChild(option);
+          });
+          modelSelect.value = 'llama3';
+        });
+
+      // When the user changes the model, notify the backend.
+      document.getElementById('model_select').addEventListener('change', function() {
+        const selectedModel = this.value;
+        fetch('/set_model', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ model: selectedModel })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Model updated:', data);
+          appendMessage("System", "Model changed to " + selectedModel);
+        })
+        .catch(error => console.error('Error:', error));
+      });
+
+      // Handle sending a chat message.
+      document.getElementById('send_btn').addEventListener('click', function() {
+        const chatInput = document.getElementById('chat_input');
+        const message = chatInput.value;
+        if (!message) return;
+        appendMessage("User", message);
+        chatInput.value = "";
+        
+        // Choose the endpoint based on the selected chat mode.
+        const chatMode = document.querySelector('input[name="chat_mode"]:checked').value;
+        let endpoint = '/ai';
+        if (chatMode === 'pdf') {
+          endpoint = '/ask_pdf';
+        }
+
+        fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ query: message })
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Response:', data);
+          appendMessage("Bot", data.answer);
+          // Optionally, if source documents are returned, display them.
+          if(data.sources && data.sources.length > 0) {
+            data.sources.forEach(src => {
+              appendMessage("Source", src.source + ": " + src.page_content);
+            });
+          }
+        })
+        .catch(error => console.error('Error:', error));
+      });
+
+      // Handle PDF upload.
+      document.getElementById('upload_btn').addEventListener('click', function() {
+        const fileInput = document.getElementById('pdf_file');
+        if(fileInput.files.length === 0) {
+          alert("Please select a PDF file to upload.");
+          return;
+        }
+        const file = fileInput.files[0];
+        const formData = new FormData();
+        formData.append("file", file);
+        
+        fetch('/pdf', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+          console.log('Upload response:', data);
+          alert("PDF Uploaded: " + data.filename);
+        })
+        .catch(error => console.error('Error:', error));
+      });
+
+      // Handle the "New Chat" button click.
+      document.getElementById('new_chat_btn').addEventListener('click', function() {
+        // Create a new chat session.
+        chats.push({ id: Date.now(), messages: [] });
+        currentChatIndex = chats.length - 1;
+        renderChatList();
+        loadChat(currentChatIndex);
+      });
+
+      // Handle clicking on the profile link.
+      document.getElementById('profile_link').addEventListener('click', function(e) {
+        e.preventDefault();
+        // For demonstration, just alert. In a real app, you could show a login modal or redirect.
+        alert("Login/Register functionality not implemented.");
+      });
+    });
+  </script>
+</body>
+</html>
