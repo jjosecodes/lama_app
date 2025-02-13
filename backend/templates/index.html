@@ -22,11 +22,12 @@
       font-size: 14px;
       z-index: 1000;
     }
-    .navbar a {
+    .navbar a, .navbar img {
       text-decoration: none;
       color: #333;
       margin-left: 10px;
       font-weight: bold;
+      cursor: pointer;
     }
     .sidebar {
       width: 250px;
@@ -40,7 +41,7 @@
       display: flex;
       flex-direction: column;
       padding: 10px;
-      margin-left: 25px; /* Make space for sidebar */
+      margin-left: 25px; /* Adjusted margin */
     }
     .chat-box {
       flex: 1;
@@ -84,6 +85,56 @@
     .upload-section {
       margin-top: 10px;
     }
+    /* Modal styles */
+    .modal {
+      display: none; /* Hidden by default */
+      position: fixed;
+      z-index: 1001;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+    }
+    .modal-content {
+      background-color: #fefefe;
+      margin: 15% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 300px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+    .modal-content h2 {
+      margin-top: 0;
+    }
+    .modal-content label {
+      display: block;
+      margin-top: 10px;
+    }
+    .modal-content input[type="text"],
+    .modal-content input[type="password"] {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      box-sizing: border-box;
+    }
+    .modal-content button {
+      margin-top: 15px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    .close {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .close:hover,
+    .close:focus {
+      color: black;
+    }
   </style>
 </head>
 <body>
@@ -123,6 +174,22 @@
       <h2>Upload PDF</h2>
       <input type="file" id="pdf_file" accept="application/pdf">
       <button id="upload_btn">Upload PDF</button>
+    </div>
+  </div>
+
+  <!-- Login/Register Modal -->
+  <div id="loginModal" class="modal">
+    <div class="modal-content">
+      <span class="close" id="modal_close">&times;</span>
+      <h2>Login / Register</h2>
+      <label for="username">Username:</label>
+      <input type="text" id="username" placeholder="Enter username">
+      <label for="password">Password:</label>
+      <input type="password" id="password" placeholder="Enter password">
+      <div style="display: flex; justify-content: space-between;">
+        <button id="login_btn">Login</button>
+        <button id="register_btn">Register</button>
+      </div>
     </div>
   </div>
 
@@ -222,6 +289,97 @@
       chats[currentChatIndex].messages.push({ sender: sender, text: text });
       addMessageToChatBox(sender, text);
     }
+
+    // --- Login/Register Modal Functionality ---
+    const loginModal = document.getElementById("loginModal");
+    const profileLink = document.getElementById("profile_link");
+    const modalClose = document.getElementById("modal_close");
+    const loginBtn = document.getElementById("login_btn");
+    const registerBtn = document.getElementById("register_btn");
+
+    // Open modal when profile link is clicked
+    profileLink.addEventListener("click", function(e) {
+      e.preventDefault();
+      loginModal.style.display = "block";
+    });
+
+    // Close modal when the "x" is clicked
+    modalClose.addEventListener("click", function() {
+      loginModal.style.display = "none";
+    });
+
+    // Close modal when clicking outside of the modal content
+    window.addEventListener("click", function(event) {
+      if (event.target === loginModal) {
+        loginModal.style.display = "none";
+      }
+    });
+
+    // Handle login button click inside the modal
+    loginBtn.addEventListener("click", function() {
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+      if (!username || !password) {
+        alert("Please enter username and password");
+        return;
+      }
+      // Example: Send a login request (replace URL and logic with your /login endpoint)
+      fetch('/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username, password: password })
+      })
+      .then(response => response.json())
+      .then(data => {
+          if (data.error) {
+              alert("Login error: " + data.error);
+          } else {
+              alert("Login successful!");
+              loginModal.style.display = "none";
+              // Replace the login/register link with a profile image.
+              const profileImg = document.createElement("img");
+              profileImg.src = "static/jj.avif"; // Ensure the image exists in your static directory.
+              profileImg.alt = "Profile";
+              profileImg.style.width = "40px";
+              profileImg.style.height = "40px";
+              profileImg.style.borderRadius = "50%";
+              const navbar = document.querySelector(".navbar");
+              navbar.innerHTML = "";
+              navbar.appendChild(profileImg);
+          }
+      })
+      .catch(error => console.error('Error:', error));
+    });
+
+    // Handle register button click inside the modal
+    registerBtn.addEventListener("click", function() {
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+      if (!username || !password) {
+        alert("Please enter username and password");
+        return;
+      }
+      fetch('/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username, password: password })
+      })
+      .then(response => response.json())
+      .then(data => {
+          if (data.error) {
+              alert("Registration error: " + data.error);
+          } else {
+              alert("Registration successful! You can now log in.");
+              // Optionally clear the form or auto-login after registration.
+              document.getElementById("username").value = "";
+              document.getElementById("password").value = "";
+              loginModal.style.display = "none";
+          }
+      })
+      .catch(error => console.error('Error:', error));
+    });
+
+    // --- End Login/Register Modal Functionality ---
 
     document.addEventListener("DOMContentLoaded", function() {
       // Initialize the chats with one session.
@@ -325,13 +483,6 @@
         currentChatIndex = chats.length - 1;
         renderChatList();
         loadChat(currentChatIndex);
-      });
-
-      // Handle clicking on the profile link.
-      document.getElementById('profile_link').addEventListener('click', function(e) {
-        e.preventDefault();
-        // For demonstration, just alert. In a real app, you could show a login modal or redirect.
-        alert("Login/Register functionality not implemented.");
       });
     });
   </script>

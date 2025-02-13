@@ -1,3 +1,6 @@
 
 #virtual env 
 rag_app
+
+__pycache__/
+venv/

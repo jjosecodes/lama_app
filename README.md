@@ -10,3 +10,9 @@ fast api server is uvicorn
 ## venv activation 
 # DO NOT FORGET 
 source rag_app/scripts/activate
+
+
+
+
+-- 
+llama 3.2 

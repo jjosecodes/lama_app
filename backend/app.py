@@ -1,4 +1,7 @@
-from flask import Flask, request, render_template, jsonify
+from flask import Flask, request, render_template, jsonify, session
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
+
 from langchain_community.llms import Ollama
 from langchain_community.vectorstores import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -9,6 +12,59 @@ from langchain.chains import create_retrieval_chain
 from langchain.prompts import PromptTemplate
 
 app = Flask(__name__, template_folder="templates")
+app.secret_key = "your_secret_key"  # Make sure to change this for production!
+
+# -------------------------------
+# Database Configuration & Models
+# -------------------------------
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# Define a User model for registration (and later, chat storage if needed)
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)
+    # You could add a chat_history field later (e.g., as a JSON column)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+    
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+# Create the tables if they do not exist
+with app.app_context():
+    db.create_all()
+
+# -------------------------------
+# Registration Endpoint
+# -------------------------------
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    
+    if not username or not password:
+        return jsonify({"error": "Username and password required"}), 400
+
+    # Check if the user already exists
+    if User.query.filter_by(username=username).first():
+        return jsonify({"error": "Username already exists"}), 400
+
+    # Create a new user and store the hashed password
+    new_user = User(username=username)
+    new_user.set_password(password)
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({"message": "User registered successfully"}), 201
+
+# -------------------------------
+# Existing App Code (Your Endpoints)
+# -------------------------------
 
 # Folder where the vector store will persist
 folder_path = "db"
@@ -44,7 +100,6 @@ def index():
 # Return a list of available models (hard-coded for this example)
 @app.route("/models", methods=["GET"])
 def get_models():
-    # Replace this list with dynamic discovery if available.
     models = ["llama3", "gpt4", "llama2", "vicuna-7B"]
     return jsonify({"models": models})
 
@@ -60,6 +115,27 @@ def set_model():
         return jsonify({"status": "Model updated", "model": current_model})
     else:
         return jsonify({"status": "No model provided"}), 400
+
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    
+    if not username or not password:
+        return jsonify({"error": "Username and password required"}), 400
+
+    user = User.query.filter_by(username=username).first()
+    if user is None or not user.check_password(password):
+        return jsonify({"error": "Invalid username or password"}), 401
+
+    # Optionally, set a session variable to keep the user logged in
+    session["username"] = username
+
+    return jsonify({"message": "Login successful", "username": username})
+
+
+
 
 # A simple chat endpoint (general chat)
 @app.route("/ai", methods=["POST"])
